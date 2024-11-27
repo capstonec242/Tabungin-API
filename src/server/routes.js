@@ -1,9 +1,11 @@
 import {
     getSavings,
     updateSaving,
-    reduceSaving,
-    addUser,
-    getUsers,
+    deleteTransaction,
+    registerUser,
+    loginUser,
+    getUser,
+    deleteUser,
     addGoal,
     getGoals,
     updateGoal,
@@ -14,12 +16,14 @@ import { authenticate } from "../middleware/auth.js";
 
 const routes = express.Router();
 
-routes.post("/users", addUser);
-routes.get("/users", authenticate, getUsers);
+routes.post("/auth/register", registerUser);
+routes.post("/auth/login", loginUser);
+routes.get("/users/:userId", authenticate, getUser);
+routes.delete("/users/:userId", authenticate, deleteUser);
 
 routes.get("/savings/:userId", authenticate, getSavings);
 routes.put("/savings/:userId", authenticate, updateSaving);
-routes.put("/savings/reduce/:userId", authenticate, reduceSaving);
+routes.delete("/savings/:userId/:savingId/:transactionId", authenticate, deleteTransaction);
 
 routes.post("/goals/:userId/:savingId", authenticate, addGoal);
 routes.get("/goals/:userId/:savingId", authenticate, getGoals);
