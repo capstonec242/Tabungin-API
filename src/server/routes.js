@@ -3,6 +3,7 @@ import {
     addSavings,
     reduceSavings,
     getCategory,
+    updateTransaction,
     deleteTransaction,
     registerUser,
     loginUser,
@@ -28,7 +29,7 @@ routes.get("/savings/:userId", authenticate, getSavings);
 routes.get("/savings/:userId/:savingId/category", authenticate, getCategory)
 routes.put("/savings/:userId/add", authenticate, addSavings)
 routes.put("/savings/:userId/reduce", authenticate, reduceSavings)
-
+routes.put("/savings/:userId/:savingId/:transactionId", authenticate, updateTransaction);
 routes.delete("/savings/:userId/:savingId/:transactionId", authenticate, deleteTransaction);
 
 routes.post("/goals/:userId/:savingId", authenticate, addGoal);

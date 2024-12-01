@@ -1,10 +1,20 @@
 import { db, auth } from "../config/firebase.js";
-import { deleteUser as authDeleteUser } from "firebase/auth";
 import { doc, addDoc, setDoc, collection, getDocs, getDoc, updateDoc, deleteDoc } from "firebase/firestore";
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, deleteUser as authDeleteUser } from "firebase/auth";
 import bcrypt from "bcrypt";
 
 const usersCollection = collection(db, 'users');
+
+const validCategoriesAddition = ["Salary", "Investments", "Part-Time", "Bonus", "Others"];
+
+const validCategoriesReduction = [
+    "Parents", "Shopping", "Food", "Phone", "Entertainment", "Education", "Beauty",
+    "Sports", "Social", "Transportations", "Clothing", "Car", "Alcohol", "Cigarettes",
+    "Electronics", "Travel", "Health", "Pets", "Repairs", "Housing", "Home", "Gifts",
+    "Donations", "Lottery", "Snacks", "Kids", "Vegetables", "Fruits"
+];
+
+const validCategories = [...validCategoriesAddition, ...validCategoriesReduction];
 
 export const registerUser = async (req, res) => {
     try {
@@ -220,10 +230,8 @@ export const addSavings = async (req, res) => {
             return res.status(400).send({ error: 'Amount, description, and category are required.' });
         }
 
-        const validCategories = ["Salary", "Investments", "Part-Time", "Bonus", "Others"];
-
-        if (!validCategories.includes(category)) {
-            return res.status(400).send({ error: `Invalid category. Allowed categories are: ${validCategories.join(", ")}.` });
+        if (!validCategoriesAddition.includes(category)) {
+            return res.status(400).send({ error: `Invalid category. Allowed categories are: ${validCategoriesAddition.join(", ")}.` });
         }
 
         const userRef = doc(db, "users", userId);
@@ -279,15 +287,8 @@ export const reduceSavings = async (req, res) => {
             return res.status(400).send({ error: 'Amount, description, and category are required.' });
         }
 
-        const validCategories = [
-            "Parents", "Shopping", "Food", "Phone", "Entertainment", "Education", "Beauty",
-            "Sports", "Social", "Transportations", "Clothing", "Car", "Alcohol", "Cigarettes",
-            "Electronics", "Travel", "Health", "Pets", "Repairs", "Housing", "Home", "Gifts",
-            "Donations", "Lottery", "Snacks", "Kids", "Vegetables", "Fruits"
-        ];
-
-        if (!validCategories.includes(category)) {
-            return res.status(400).send({ error: `Invalid category. Allowed categories are: ${validCategories.join(", ")}.` });
+        if (!validCategoriesReduction.includes(category)) {
+            return res.status(400).send({ error: `Invalid category. Allowed categories are: ${validCategoriesReduction.join(", ")}.` });
         }
 
         const userRef = doc(db, "users", userId);
@@ -343,17 +344,6 @@ export const getCategory = async (req, res) => {
         const { userId, savingId } = req.params;
         const { category } = req.body;
 
-        const validCategoriesAddition = ["Salary", "Investments", "Part-Time", "Bonus", "Others"];
-
-        const validCategoriesReduction = [
-            "Parents", "Shopping", "Food", "Phone", "Entertainment", "Education", "Beauty",
-            "Sports", "Social", "Transportations", "Clothing", "Car", "Alcohol", "Cigarettes",
-            "Electronics", "Travel", "Health", "Pets", "Repairs", "Housing", "Home", "Gifts",
-            "Donations", "Lottery", "Snacks", "Kids", "Vegetables", "Fruits"
-        ];
-
-        const validCategories = [...validCategoriesAddition, ...validCategoriesReduction];
-
         if (!category) {
             return res.status(400).send({ error: 'Category is required.' });
         }
@@ -395,6 +385,111 @@ export const getCategory = async (req, res) => {
     } catch (error) {
         console.error("Error fetching history by category: ", error);
         res.status(500).send({ error: 'Error fetching history by category!' });
+    }
+};
+
+export const updateTransaction = async (req, res) => {
+    try {
+        const { userId, savingId, transactionId } = req.params;
+        const { amount, description, category } = req.body;
+
+        if (!userId || !savingId || !transactionId) {
+            return res.status(400).send({
+                error: 'userId, savingId, and transactionId are required.',
+            });
+        }
+
+        if (category && !validCategories.includes(category)) {
+            return res.status(400).send({
+                error: `Invalid category. Allowed categories are: ${validCategories.join(
+                    ', '
+                )}.`,
+            });
+        }
+
+        const savingRef = doc(db, 'users', userId, 'savings', savingId);
+        const savingSnapshot = await getDoc(savingRef);
+
+        if (!savingSnapshot.exists()) {
+            return res.status(404).send({ error: 'Saving not found.' });
+        }
+
+        const savingData = savingSnapshot.data();
+        const additionCollectionRef = collection(savingRef, 'addition');
+        const reductionCollectionRef = collection(savingRef, 'reduction');
+
+        let transactionRef = null;
+        let transactionType = null;
+        let originalAmount = 0;
+
+        transactionRef = doc(additionCollectionRef, transactionId);
+        const additionSnapshot = await getDoc(transactionRef);
+
+        if (additionSnapshot.exists()) {
+            transactionType = 'addition';
+            originalAmount = additionSnapshot.data().amount;
+        } else {
+            transactionRef = doc(reductionCollectionRef, transactionId);
+            const reductionSnapshot = await getDoc(transactionRef);
+
+            if (reductionSnapshot.exists()) {
+                transactionType = 'reduction';
+                originalAmount = reductionSnapshot.data().amount;
+            } else {
+                return res.status(404).send({
+                    error: 'Transaction not found in addition or reduction collections.',
+                });
+            }
+        }
+
+        const updatedTransaction = {
+            updatedAt: new Date(),
+        };
+
+        if (amount !== undefined) {
+            if (typeof amount !== 'number' || amount <= 0) {
+                return res.status(400).send({
+                    error: 'Amount must be a positive number.',
+                });
+            }
+            updatedTransaction.amount = amount;
+        }
+        if (description !== undefined) {
+            updatedTransaction.description = description;
+        }
+        if (category !== undefined) {
+            updatedTransaction.category = category;
+        }
+
+        await updateDoc(transactionRef, updatedTransaction);
+
+        let updatedAmount = savingData.amount;
+        if (amount !== undefined) {
+            if (transactionType === 'addition') {
+                updatedAmount = savingData.amount - originalAmount + amount;
+            } else if (transactionType === 'reduction') {
+                updatedAmount = savingData.amount + originalAmount - amount;
+            }
+        }
+
+        if (amount !== undefined) {
+            await updateDoc(savingRef, {
+                amount: updatedAmount,
+                updatedAt: new Date(),
+            });
+        }
+
+        res.status(200).send({
+            message: `Transaction updated successfully in ${transactionType}.`,
+            data: {
+                transactionId,
+                updatedTransaction,
+                updatedAmount,
+            },
+        });
+    } catch (error) {
+        console.error('Error updating transaction: ', error);
+        res.status(500).send({ error: 'Error updating transaction!' });
     }
 };
 
