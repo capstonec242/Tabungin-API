@@ -1,5 +1,5 @@
 import { db, auth } from "../config/firebase.js";
-import { doc, addDoc, setDoc, collection, getDocs, getDoc, updateDoc, deleteDoc} from "firebase/firestore";
+import { doc, addDoc, setDoc, collection, getDocs, getDoc, updateDoc, deleteDoc } from "firebase/firestore";
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
 import bcrypt from "bcrypt";
 
@@ -198,8 +198,8 @@ export const getSavings = async (req, res) => {
                 id: savingDoc.id,
                 userId,
                 amount: savingData.amount,
-                totalAdditions, 
-                totalReductions, 
+                totalAdditions,
+                totalReductions,
                 additions,
                 reductions,
             },
@@ -333,6 +333,15 @@ export const getCategory = async (req, res) => {
         const { userId, savingId } = req.params;
         const { category } = req.body;
 
+        const validCategoriesAddition = ["Salary", "Investments", "Part-Time", "Bonus", "Others"];
+
+        const validCategoriesReduction = [
+            "Parents", "Shopping", "Food", "Phone", "Entertainment", "Education", "Beauty",
+            "Sports", "Social", "Transportations", "Clothing", "Car", "Alcohol", "Cigarettes",
+            "Electronics", "Travel", "Health", "Pets", "Repairs", "Housing", "Home", "Gifts",
+            "Donations", "Lottery", "Snacks", "Kids", "Vegetables", "Fruits"
+        ];
+
         const validCategories = [...validCategoriesAddition, ...validCategoriesReduction];
 
         if (!category) {
@@ -394,14 +403,23 @@ export const deleteTransaction = async (req, res) => {
 
         let transactionRef = null;
         let transactionCollectionRef = null;
+        let transactionAmount = 0;
 
         transactionCollectionRef = collection(savingRef, "addition");
         transactionRef = doc(transactionCollectionRef, transactionId);
         const transactionSnapshot = await getDoc(transactionRef);
 
         if (transactionSnapshot.exists()) {
+            transactionAmount = transactionSnapshot.data().amount;
+
             await deleteDoc(transactionRef);
-            return res.status(200).send({ message: "Transaction deleted successfully from 'addition'." });
+            const updatedAmount = savingSnapshot.data().amount - transactionAmount;
+            await updateDoc(savingRef, { amount: updatedAmount });
+
+            return res.status(200).send({
+                message: "Transaction deleted successfully from 'addition'.",
+                updatedAmount,
+            });
         }
 
         transactionCollectionRef = collection(savingRef, "reduction");
@@ -410,8 +428,15 @@ export const deleteTransaction = async (req, res) => {
         const transactionSnapshotReduction = await getDoc(transactionRef);
 
         if (transactionSnapshotReduction.exists()) {
+            transactionAmount = transactionSnapshotReduction.data().amount;
+
             await deleteDoc(transactionRef);
-            return res.status(200).send({ message: "Transaction deleted successfully from 'reduction'." });
+            const updatedAmount = savingSnapshot.data().amount + transactionAmount;
+            await updateDoc(savingRef, { amount: updatedAmount });
+
+            return res.status(200).send({
+                message: "Transaction deleted successfully from 'reduction'.",
+            });
         }
 
         return res.status(404).send({ error: 'Transaction not found in "addition" or "reduction" collections.' });
