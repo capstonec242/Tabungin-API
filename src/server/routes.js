@@ -1,6 +1,8 @@
 import {
     getSavings,
-    updateSaving,
+    addSavings,
+    reduceSavings,
+    getCategory,
     deleteTransaction,
     registerUser,
     loginUser,
@@ -22,7 +24,11 @@ routes.get("/users/:userId", authenticate, getUser);
 routes.delete("/users/:userId", authenticate, deleteUser);
 
 routes.get("/savings/:userId", authenticate, getSavings);
-routes.put("/savings/:userId", authenticate, updateSaving);
+// routes.put("/savings/:userId", authenticate, updateSaving);
+routes.get("/savings/:userId/:savingId/category", authenticate, getCategory)
+routes.put("/savings/:userId/add", authenticate, addSavings)
+routes.put("/savings/:userId/reduce", authenticate, reduceSavings)
+
 routes.delete("/savings/:userId/:savingId/:transactionId", authenticate, deleteTransaction);
 
 routes.post("/goals/:userId/:savingId", authenticate, addGoal);

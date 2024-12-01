@@ -5,6 +5,15 @@ import bcrypt from "bcrypt";
 
 const usersCollection = collection(db, 'users');
 
+const validCategoriesAddition = ["Salary", "Investments", "Part-Time", "Bonus", "Others"];
+
+const validCategoriesReduction = [
+    "Parents", "Shopping", "Food", "Phone", "Entertainment", "Education", "Beauty",
+    "Sports", "Social", "Transportations", "Clothing", "Car", "Alcohol", "Cigarettes",
+    "Electronics", "Travel", "Health", "Pets", "Repairs", "Housing", "Home", "Gifts",
+    "Donations", "Lottery", "Snacks", "Kids", "Vegetables", "Fruits"
+];
+
 export const registerUser = async (req, res) => {
     try {
         const { username, email, password } = req.body;
@@ -201,22 +210,21 @@ export const getSavings = async (req, res) => {
     }
 };
 
-export const updateSaving = async (req, res) => {
+export const addSavings = async (req, res) => {
     try {
         const { userId } = req.params;
-        const { amount, description, actionType } = req.body;
+        const { amount, description, category } = req.body;
 
-        if ( typeof amount !== "number" || amount <= 0 || !description || !actionType) {
-            return res.status(400).send({ error: 'Amount, description, and actionType are required.' });
+        if (typeof amount !== "number" || amount <= 0 || !description || !category) {
+            return res.status(400).send({ error: 'Amount, description, and category are required.' });
         }
 
-        if (!['add', 'reduce'].includes(actionType)) {
-            return res.status(400).send({ error: 'Invalid actionType, must be "add" or "reduce".' });
+        if (!validCategoriesAddition.includes(category)) {
+            return res.status(400).send({ error: `Invalid category. Allowed categories are: ${validCategoriesAddition.join(", ")}.` });
         }
 
         const userRef = doc(db, "users", userId);
         const savingsCollectionRef = collection(userRef, "savings");
-
         const savingsSnapshot = await getDocs(savingsCollectionRef);
 
         if (savingsSnapshot.empty) {
@@ -227,56 +235,147 @@ export const updateSaving = async (req, res) => {
         const savingRef = doc(savingsCollectionRef, savingDoc.id);
 
         const existingData = savingDoc.data();
-        let updatedAmount;
+        const updatedAmount = existingData.amount + amount;
 
-        if (actionType === 'add') {
-            updatedAmount = existingData.amount + amount;
-        } else if (actionType === 'reduce') {
-            if (existingData.amount < amount) {
-                return res.status(400).send({ error: 'Insufficient saving amount to reduce.' });
-            }
-            updatedAmount = existingData.amount - amount;
-        }
-
-        const updatedData = {
+        await updateDoc(savingRef, {
             amount: updatedAmount,
             updatedAt: new Date(),
-        };
+        });
 
-        await updateDoc(savingRef, updatedData);
-
-        const transactionCollectionRef = actionType === 'add' ? collection(savingRef, "addition") : collection(savingRef, "reduction");
+        const additionCollectionRef = collection(savingRef, "addition");
         const transactionData = {
             amount,
             description,
+            category,
             createdAt: new Date(),
         };
 
-        await addDoc(transactionCollectionRef, transactionData);
-
-        const goalsCollectionRef = collection(savingRef, "goals");
-        const goalsSnapshot = await getDocs(goalsCollectionRef);
-
-        goalsSnapshot.docs.forEach(async (goalDoc) => {
-            const goalRef = doc(goalsCollectionRef, goalDoc.id);
-            const goalData = goalDoc.data();
-
-            const updatedStatus = updatedAmount >= goalData.targetAmount ? "Completed" : "On-Progress";
-            await updateDoc(goalRef, { status: updatedStatus });
-        });
+        await addDoc(additionCollectionRef, transactionData);
 
         res.status(200).send({
-            message: `${actionType.charAt(0).toUpperCase() + actionType.slice(1)} saving successfully!`,
+            message: "Addition success!",
             data: {
                 id: savingDoc.id,
                 userId,
-                ...updatedData,
+                updatedAmount,
                 transaction: transactionData,
             },
         });
     } catch (error) {
-        console.error(`Error updating saving: `, error);
-        res.status(500).send({ error: 'Error updating saving!' });
+        console.error("Error adding savings: ", error);
+        res.status(500).send({ error: 'Error adding savings!' });
+    }
+};
+
+export const reduceSavings = async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const { amount, description, category } = req.body;
+
+        if (typeof amount !== "number" || amount <= 0 || !description || !category) {
+            return res.status(400).send({ error: 'Amount, description, and category are required.' });
+        }
+
+        if (!validCategoriesReduction.includes(category)) {
+            return res.status(400).send({ error: `Invalid category. Allowed categories are: ${validCategoriesReduction.join(", ")}.` });
+        }
+
+        const userRef = doc(db, "users", userId);
+        const savingsCollectionRef = collection(userRef, "savings");
+        const savingsSnapshot = await getDocs(savingsCollectionRef);
+
+        if (savingsSnapshot.empty) {
+            return res.status(404).send({ error: 'Saving not found.' });
+        }
+
+        const savingDoc = savingsSnapshot.docs[0];
+        const savingRef = doc(savingsCollectionRef, savingDoc.id);
+
+        const existingData = savingDoc.data();
+        if (existingData.amount < amount) {
+            return res.status(400).send({ error: 'Insufficient saving amount to reduce.' });
+        }
+
+        const updatedAmount = existingData.amount - amount;
+
+        await updateDoc(savingRef, {
+            amount: updatedAmount,
+            updatedAt: new Date(),
+        });
+
+        const reductionCollectionRef = collection(savingRef, "reduction");
+        const transactionData = {
+            amount,
+            description,
+            category,
+            createdAt: new Date(),
+        };
+
+        await addDoc(reductionCollectionRef, transactionData);
+
+        res.status(200).send({
+            message: "Reduction success!",
+            data: {
+                id: savingDoc.id,
+                userId,
+                updatedAmount,
+                transaction: transactionData,
+            },
+        });
+    } catch (error) {
+        console.error("Error reducing savings: ", error);
+        res.status(500).send({ error: 'Error reducing savings!' });
+    }
+};
+
+export const getCategory = async (req, res) => {
+    try {
+        const { userId, savingId } = req.params;
+        const { category } = req.body;
+
+        const validCategories = [...validCategoriesAddition, ...validCategoriesReduction];
+
+        if (!category) {
+            return res.status(400).send({ error: 'Category is required.' });
+        }
+
+        if (!validCategories.includes(category)) {
+            return res.status(400).send({
+                error: `Invalid category. Allowed categories are: ${validCategories.join(", ")}.`,
+            });
+        }
+
+        const savingRef = doc(db, "users", userId, "savings", savingId);
+        const savingSnapshot = await getDoc(savingRef);
+
+        if (!savingSnapshot.exists()) {
+            return res.status(404).send({ error: 'Saving not found.' });
+        }
+
+        const additionCollectionRef = collection(savingRef, "addition");
+        const reductionCollectionRef = collection(savingRef, "reduction");
+
+        const additionsSnapshot = await getDocs(additionCollectionRef);
+        const reductionsSnapshot = await getDocs(reductionCollectionRef);
+
+        const filteredAdditions = additionsSnapshot.docs
+            .map((doc) => ({ id: doc.id, ...doc.data() }))
+            .filter((item) => item.category === category);
+
+        const filteredReductions = reductionsSnapshot.docs
+            .map((doc) => ({ id: doc.id, ...doc.data() }))
+            .filter((item) => item.category === category);
+
+        res.status(200).send({
+            message: `History for category: ${category}`,
+            data: {
+                additions: filteredAdditions,
+                reductions: filteredReductions,
+            },
+        });
+    } catch (error) {
+        console.error("Error fetching history by category: ", error);
+        res.status(500).send({ error: 'Error fetching history by category!' });
     }
 };
 

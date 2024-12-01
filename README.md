@@ -42,7 +42,7 @@ Comprehensive API documentation is available on Postman:
 ### Steps to Use:
 1. **Authentication**:
    - Register a new user using the `/auth/register` endpoint.
-   - Login to obtain a token.
+   - Login to obtain a token with `/auth/login.
 
 2. **Manage Savings**:
    - View the saving with `/savings/:userId`.
