@@ -1,25 +1,17 @@
 import { db, auth } from "../config/firebase.js";
+import { deleteUser as authDeleteUser } from "firebase/auth";
 import { doc, addDoc, setDoc, collection, getDocs, getDoc, updateDoc, deleteDoc } from "firebase/firestore";
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
 import bcrypt from "bcrypt";
 
 const usersCollection = collection(db, 'users');
 
-const validCategoriesAddition = ["Salary", "Investments", "Part-Time", "Bonus", "Others"];
-
-const validCategoriesReduction = [
-    "Parents", "Shopping", "Food", "Phone", "Entertainment", "Education", "Beauty",
-    "Sports", "Social", "Transportations", "Clothing", "Car", "Alcohol", "Cigarettes",
-    "Electronics", "Travel", "Health", "Pets", "Repairs", "Housing", "Home", "Gifts",
-    "Donations", "Lottery", "Snacks", "Kids", "Vegetables", "Fruits"
-];
-
 export const registerUser = async (req, res) => {
     try {
         const { username, email, password } = req.body;
 
         if (!username || !email || !password) {
-            return res.status(400).send({ error: "Username, email, and password are required." });
+            return res.status(400).send({ error: "username, email, and password are required." });
         }
 
         const saltRounds = 10;
@@ -110,6 +102,7 @@ export const getUser = async (req, res) => {
     }
 };
 
+
 export const deleteUser = async (req, res) => {
     try {
         const { userId } = req.params;
@@ -152,12 +145,20 @@ export const deleteUser = async (req, res) => {
 
         await deleteDoc(userRef);
 
+        const user = auth.currentUser;
+        if (user.uid === userId) {
+            await authDeleteUser(user);
+        } else {
+            throw new Error("Cannot delete user: Authenticated user does not match the target user ID.");
+        }
+
         res.status(200).send({ message: "User deleted successfully." });
     } catch (error) {
         console.error("Error deleting user: ", error);
-        res.status(500).send({ error: 'Error deleting user!' });
+        res.status(500).send({ error: "Error deleting user!" });
     }
-}
+};
+
 
 export const getSavings = async (req, res) => {
     try {
@@ -219,8 +220,10 @@ export const addSavings = async (req, res) => {
             return res.status(400).send({ error: 'Amount, description, and category are required.' });
         }
 
-        if (!validCategoriesAddition.includes(category)) {
-            return res.status(400).send({ error: `Invalid category. Allowed categories are: ${validCategoriesAddition.join(", ")}.` });
+        const validCategories = ["Salary", "Investments", "Part-Time", "Bonus", "Others"];
+
+        if (!validCategories.includes(category)) {
+            return res.status(400).send({ error: `Invalid category. Allowed categories are: ${validCategories.join(", ")}.` });
         }
 
         const userRef = doc(db, "users", userId);
@@ -276,8 +279,15 @@ export const reduceSavings = async (req, res) => {
             return res.status(400).send({ error: 'Amount, description, and category are required.' });
         }
 
-        if (!validCategoriesReduction.includes(category)) {
-            return res.status(400).send({ error: `Invalid category. Allowed categories are: ${validCategoriesReduction.join(", ")}.` });
+        const validCategories = [
+            "Parents", "Shopping", "Food", "Phone", "Entertainment", "Education", "Beauty",
+            "Sports", "Social", "Transportations", "Clothing", "Car", "Alcohol", "Cigarettes",
+            "Electronics", "Travel", "Health", "Pets", "Repairs", "Housing", "Home", "Gifts",
+            "Donations", "Lottery", "Snacks", "Kids", "Vegetables", "Fruits"
+        ];
+
+        if (!validCategories.includes(category)) {
+            return res.status(400).send({ error: `Invalid category. Allowed categories are: ${validCategories.join(", ")}.` });
         }
 
         const userRef = doc(db, "users", userId);
