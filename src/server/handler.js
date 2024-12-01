@@ -1,6 +1,6 @@
 import { db, auth } from "../config/firebase.js";
 import { doc, addDoc, setDoc, collection, getDocs, getDoc, updateDoc, deleteDoc } from "firebase/firestore";
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, deleteUser as authDeleteUser } from "firebase/auth";
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, deleteUser as authDeleteUser, updatePassword } from "firebase/auth";
 import bcrypt from "bcrypt";
 
 const usersCollection = collection(db, 'users');
@@ -79,6 +79,64 @@ export const loginUser = async (req, res) => {
     } catch (error) {
         console.error("Error login user: ", error);
         res.status(500).send({ error: "Error login user!" });
+    }
+};
+
+export const updateUser = async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const { username, password, currentPassword } = req.body;
+
+        if (!userId) {
+            return res.status(400).send({ error: "User ID is required." });
+        }
+
+        const currentUser = auth.currentUser;
+        if (!currentUser) {
+            return res.status(401).send({ error: "User not authenticated." });
+        }
+
+        if (currentUser.uid !== userId) {
+            return res.status(403).send({ error: "You are not authorized to update this user." });
+        }
+
+        const userRef = doc(usersCollection, userId);
+        const userSnapshot = await getDoc(userRef);
+
+        if (!userSnapshot.exists()) {
+            return res.status(404).send({ error: "User not found." });
+        }
+
+        if (username) {
+            await updateDoc(userRef, {
+                username,
+                updatedAt: new Date(),
+            });
+        }
+
+        if (password) {
+            if (!currentPassword) {
+                return res.status(400).send({ error: "Current password is required to update password." });
+            }
+
+            try {
+                await signInWithEmailAndPassword(auth, currentUser.email, currentPassword);
+                await updatePassword(currentUser, password);
+            } catch (error) {
+                return res.status(403).send({ error: "Current password is incorrect." });
+            }
+        }
+
+        res.status(200).send({
+            message: "User updated successfully.",
+            data: {
+                userId,
+                username: username || userSnapshot.data().username,
+            },
+        });
+    } catch (error) {
+        console.error("Error updating user: ", error);
+        res.status(500).send({ error: "Error updating user!" });
     }
 };
 

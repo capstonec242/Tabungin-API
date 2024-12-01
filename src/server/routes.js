@@ -8,6 +8,7 @@ import {
     registerUser,
     loginUser,
     getUser,
+    updateUser,
     deleteUser,
     addGoal,
     getGoals,
@@ -21,11 +22,11 @@ const routes = express.Router();
 
 routes.post("/auth/register", registerUser);
 routes.post("/auth/login", loginUser);
+routes.put("/users/:userId", authenticate, updateUser);
 routes.get("/users/:userId", authenticate, getUser);
 routes.delete("/users/:userId", authenticate, deleteUser);
 
 routes.get("/savings/:userId", authenticate, getSavings);
-// routes.put("/savings/:userId", authenticate, updateSaving);
 routes.get("/savings/:userId/:savingId/category", authenticate, getCategory)
 routes.put("/savings/:userId/add", authenticate, addSavings)
 routes.put("/savings/:userId/reduce", authenticate, reduceSavings)
