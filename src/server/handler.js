@@ -85,19 +85,10 @@ export const loginUser = async (req, res) => {
 export const updateUser = async (req, res) => {
     try {
         const { userId } = req.params;
-        const { username, password, currentPassword } = req.body;
+        const { username, password, newPassword } = req.body;
 
-        if (!userId) {
-            return res.status(400).send({ error: "User ID is required." });
-        }
-
-        const currentUser = auth.currentUser;
-        if (!currentUser) {
-            return res.status(401).send({ error: "User not authenticated." });
-        }
-
-        if (currentUser.uid !== userId) {
-            return res.status(403).send({ error: "You are not authorized to update this user." });
+        if (!username && !password && !newPassword) {
+            return res.status(400).send({ error: "At least one field (username, password, newPassword) is required to update." });
         }
 
         const userRef = doc(usersCollection, userId);
@@ -107,31 +98,36 @@ export const updateUser = async (req, res) => {
             return res.status(404).send({ error: "User not found." });
         }
 
+        const userData = userSnapshot.data();
+
+        const updatedData = {
+            ...userData,
+            updatedAt: new Date(),
+        };
+
         if (username) {
-            await updateDoc(userRef, {
-                username,
-                updatedAt: new Date(),
-            });
+            updatedData.username = username;
         }
 
-        if (password) {
-            if (!currentPassword) {
-                return res.status(400).send({ error: "Current password is required to update password." });
-            }
-
-            try {
-                await signInWithEmailAndPassword(auth, currentUser.email, currentPassword);
-                await updatePassword(currentUser, password);
-            } catch (error) {
+        if (password && newPassword) {
+            const isPasswordValid = await bcrypt.compare(password, userData.passwordHash);
+            if (!isPasswordValid) {
                 return res.status(403).send({ error: "Current password is incorrect." });
             }
+
+            const saltRounds = 10;
+            const hashedNewPassword = await bcrypt.hash(newPassword, saltRounds);
+            await updatePassword(auth.currentUser, newPassword);
+            updatedData.passwordHash = hashedNewPassword;
         }
+
+        await updateDoc(userRef, updatedData);
 
         res.status(200).send({
             message: "User updated successfully.",
             data: {
-                userId,
-                username: username || userSnapshot.data().username,
+                id: userId,
+                ...updatedData,
             },
         });
     } catch (error) {
@@ -139,6 +135,7 @@ export const updateUser = async (req, res) => {
         res.status(500).send({ error: "Error updating user!" });
     }
 };
+
 
 export const getUser = async (req, res) => {
     try {
