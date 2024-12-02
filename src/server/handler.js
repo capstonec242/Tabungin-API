@@ -1,5 +1,6 @@
-import { db, auth } from "../config/firebase.js";
+import { db, auth, storage } from "../config/firebase.js";
 import { doc, addDoc, setDoc, collection, getDocs, getDoc, updateDoc, deleteDoc } from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, deleteUser as authDeleteUser, updatePassword } from "firebase/auth";
 import bcrypt from "bcrypt";
 
@@ -133,6 +134,43 @@ export const updateUser = async (req, res) => {
     } catch (error) {
         console.error("Error updating user: ", error);
         res.status(500).send({ error: "Error updating user!" });
+    }
+};
+
+export const uploadFile = async (file, folder = "uploads") => {
+    const fileRef = ref(storage, `${folder}/${Date.now()}-${file.originalname}`);
+    await uploadBytes(fileRef, file.buffer);
+    const downloadURL = await getDownloadURL(fileRef);
+    return downloadURL;
+};
+
+export const updatePhoto = async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const file = req.file;
+
+        if (!file) {
+            return res.status(400).send({ error: "Photo file is required." });
+        }
+
+        const photoUrl = await uploadFile(file, `profile-photos/${userId}`);
+
+        const userRef = doc(db, "users", userId);
+        const userSnapshot = await getDoc(userRef);
+
+        if (!userSnapshot.exists()) {
+            return res.status(404).send({ error: "User not found." });
+        }
+
+        await updateDoc(userRef, { photoUrl, updatedAt: new Date() });
+
+        res.status(200).send({
+            message: "Profile photo updated successfully.",
+            data: { photoUrl },
+        });
+    } catch (error) {
+        console.error("Error updating photo: ", error);
+        res.status(500).send({ error: "Error updating photo!" });
     }
 };
 

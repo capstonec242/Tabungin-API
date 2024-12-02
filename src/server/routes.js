@@ -8,6 +8,7 @@ import {
     registerUser,
     loginUser,
     getUser,
+    updatePhoto,
     updateUser,
     deleteUser,
     addGoal,
@@ -17,12 +18,14 @@ import {
 } from "./handler.js";
 import express from "express";
 import { authenticate } from "../middleware/auth.js";
+import upload from "../middleware/upload.js";
 
 const routes = express.Router();
 
 routes.post("/auth/register", registerUser);
 routes.post("/auth/login", loginUser);
 routes.put("/users/:userId", authenticate, updateUser);
+routes.put("/users/:userId/photo", authenticate, upload.single("photo"), updatePhoto);
 routes.get("/users/:userId", authenticate, getUser);
 routes.delete("/users/:userId", authenticate, deleteUser);
 
