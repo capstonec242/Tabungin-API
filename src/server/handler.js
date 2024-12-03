@@ -434,8 +434,7 @@ export const reduceSavings = async (req, res) => {
 
 export const getCategory = async (req, res) => {
     try {
-        const { userId, savingId } = req.params;
-        const { category } = req.body;
+        const { userId, savingId, category } = req.params;
 
         if (!category) {
             return res.status(400).send({ error: 'Category is required.' });
@@ -468,12 +467,25 @@ export const getCategory = async (req, res) => {
             .map((doc) => ({ id: doc.id, ...doc.data() }))
             .filter((item) => item.category === category);
 
+        if (filteredAdditions.length === 0 && filteredReductions.length === 0) {
+            return res.status(404).send({
+                message: `No history found for category: ${category}.`,
+            });
+        }
+
+        const responseData = {};
+
+        if (filteredAdditions.length > 0) {
+            responseData.additions = filteredAdditions;
+        }
+
+        if (filteredReductions.length > 0) {
+            responseData.reductions = filteredReductions;
+        }
+
         res.status(200).send({
             message: `History for category: ${category}`,
-            data: {
-                additions: filteredAdditions,
-                reductions: filteredReductions,
-            },
+            data: responseData,
         });
     } catch (error) {
         console.error("Error fetching history by category: ", error);

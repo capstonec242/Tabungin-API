@@ -30,7 +30,7 @@ routes.get("/users/:userId", authenticate, getUser);
 routes.delete("/users/:userId", authenticate, deleteUser);
 
 routes.get("/savings/:userId", authenticate, getSavings);
-routes.get("/savings/:userId/:savingId/category", authenticate, getCategory)
+routes.get("/savings/:userId/:savingId/:category", authenticate, getCategory)
 routes.put("/savings/:userId/add", authenticate, addSavings)
 routes.put("/savings/:userId/reduce", authenticate, reduceSavings)
 routes.put("/savings/:userId/:savingId/:transactionId", authenticate, updateTransaction);
