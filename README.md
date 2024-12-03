@@ -36,20 +36,23 @@ Comprehensive API documentation is available on Postman:
 ## 📝 How to Use This API
 ### Prerequisites
 1. Register first to save your data on database.
-1. Obtain an authentication token via the **Login** endpoints.
-2. Use tools like Postman or cURL to interact with the API.
+2. Obtain an authentication token via the **Login** endpoints.
+3. Use tools like Postman or cURL to interact with the API.
 
 ### Steps to Use:
-1. **Authentication**:
+1. **Authentication Users**:
    - Register a new user using the `/auth/register` endpoint.
-   - Login to obtain a token with `/auth/login.
+   - Login to obtain a token with `/auth/login`.
+   - Update, Get, and Delete profile user with `/users/:userId`.
+   - Add Photo Profile using the  `/users/:userId/photo` endpoint.
 
 2. **Manage Savings**:
    - View the saving with `/savings/:userId`.
+   - Add or Reduce savings with `/savings/:userId/(add or reduce)`.
 
-3. **Track Additions and Reductions**:
-   - Add or Reduce savings with `/savings/:userId`.
-   - Delete transaction history as needed.
+3. **Track Transaction**:
+   - View the transaction history by category with `/savings/:userId/:savingId/:category`.
+   - Update and delete transaction history using the `/savings/:userId/:savingId/:transactionId` endpoint.
 
 4. **Set Goals**:
    - Create a saving goal with `/goals/:userId/:savingId`.
