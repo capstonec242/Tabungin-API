@@ -12,7 +12,7 @@ const validCategoriesReduction = [
     "Parents", "Shopping", "Food", "Phone", "Entertainment", "Education", "Beauty",
     "Sports", "Social", "Transportations", "Clothing", "Car", "Alcohol", "Cigarettes",
     "Electronics", "Travel", "Health", "Pets", "Repairs", "Housing", "Home", "Gifts",
-    "Donations", "Lottery", "Snacks", "Kids", "Vegetables", "Fruits"
+    "Donations", "Lottery", "Snacks", "Kids", "Vegetables", "Fruits", "Goals"
 ];
 
 const validCategories = [...validCategoriesAddition, ...validCategoriesReduction];
@@ -657,14 +657,13 @@ export const deleteTransaction = async (req, res) => {
     }
 };
 
-
-export const addGoal = async (req, res) => {
+export const addGoalAmount = async (req, res) => {
     try {
-        const { userId, savingId } = req.params;
-        const { title, targetAmount } = req.body;
+        const { userId, savingId, goalId } = req.params;
+        const { amount } = req.body;
 
-        if (!title || !targetAmount) {
-            return res.status(400).send({ error: 'title or targetAmount are required.' });
+        if (!amount || amount <= 0) {
+            return res.status(400).send({ error: 'Amount must be greater than zero.' });
         }
 
         const savingRef = doc(usersCollection, userId, "savings", savingId);
@@ -675,15 +674,85 @@ export const addGoal = async (req, res) => {
         }
 
         const savingData = savingSnapshot.data();
-        const totalAmount = savingData.amount;
 
-        const status = totalAmount >= targetAmount ? "Completed" : "On-Progress";
+        if (savingData.amount < amount) {
+            return res.status(400).send({ error: 'Insufficient saving amount.' });
+        }
+
+        const goalRef = doc(savingRef, "goals", goalId);
+        const goalSnapshot = await getDoc(goalRef);
+
+        if (!goalSnapshot.exists()) {
+            return res.status(404).send({ error: 'Goal not found.' });
+        }
+
+        const goalData = goalSnapshot.data();
+
+        const updatedGoalAmount = goalData.amount + amount;
+        const status = updatedGoalAmount >= goalData.targetAmount ? "Completed" : "On-Progress";
+
+        await updateDoc(goalRef, { 
+            amount: updatedGoalAmount, 
+            status, 
+            updatedAt: new Date() 
+        });
+
+        const updatedSavingAmount = savingData.amount - amount;
+        await updateDoc(savingRef, { 
+            amount: updatedSavingAmount, 
+            updatedAt: new Date() 
+        });
+
+        const reductionCollectionRef = collection(savingRef, "reduction");
+        const reductionData = {
+            amount,
+            description: `Amount added to goal: ${goalData.title}`,
+            category: "Goal",
+            createdAt: new Date(),
+        };
+        await addDoc(reductionCollectionRef, reductionData);
+
+        res.status(200).send({
+            message: "Goal amount added successfully.",
+            goalId,
+            updatedGoalAmount,
+            updatedSavingAmount,
+        });
+    } catch (error) {
+        console.error("Error adding goal amount: ", error);
+        res.status(500).send({ error: 'Error adding goal amount!' });
+    }
+};
+
+export const addGoal = async (req, res) => {
+    try {
+        const { userId, savingId } = req.params;
+        const { title, targetAmount } = req.body;
+
+        if (!title || !targetAmount) {
+            return res.status(400).send({ error: 'Title and targetAmount are required.' });
+        }
+
+        const savingRef = doc(usersCollection, userId, "savings", savingId);
+        const savingSnapshot = await getDoc(savingRef);
+
+        if (!savingSnapshot.exists()) {
+            return res.status(404).send({ error: 'Saving not found.' });
+        }
 
         const goalsCollectionRef = collection(savingRef, "goals");
-        const goalData = { title, targetAmount, status };
+        const goalData = { 
+            title, 
+            targetAmount, 
+            amount: 0, 
+            status: "On-Progress", 
+            createdAt: new Date() 
+        };
+
         const goalRef = await addDoc(goalsCollectionRef, goalData);
 
         res.status(201).send({
+            message: "Goal added successfully.",
             id: goalRef.id,
             ...goalData,
         });
@@ -692,7 +761,6 @@ export const addGoal = async (req, res) => {
         res.status(500).send({ error: 'Error adding goal!' });
     }
 };
-
 
 export const getGoals = async (req, res) => {
     try {
@@ -709,8 +777,6 @@ export const getGoals = async (req, res) => {
             return res.status(404).send({ error: 'Saving not found.' });
         }
 
-        const savingData = savingSnapshot.data();
-
         const goalsCollectionRef = collection(savingRef, "goals");
         const goalsSnapshot = await getDocs(goalsCollectionRef);
 
@@ -723,71 +789,64 @@ export const getGoals = async (req, res) => {
             ...doc.data(),
         }));
 
-        const response = {
-            id: savingId,
-            userId,
-            amount: savingData.amount,
-            goals: goals,
-        };
-
-        res.status(200).send(response);
+        res.status(200).send(goals);
     } catch (error) {
-        console.error("Error fetching saving with goals: ", error);
-        res.status(500).send({ error: 'Error fetching saving with goals!' });
+        console.error("Error fetching goals: ", error);
+        res.status(500).send({ error: 'Error fetching goals!' });
     }
 };
-
 
 export const updateGoal = async (req, res) => {
     try {
         const { userId, savingId, goalId } = req.params;
         const { title, targetAmount } = req.body;
 
-        if (!userId || !savingId || !goalId) {
-            return res.status(400).send({ error: 'userId, savingId, and goalId are required.' });
+        if (!title && !targetAmount) {
+            return res.status(400).send({ error: 'At least one of title or targetAmount is required.' });
         }
 
-        const goalRef = doc(db, "users", userId, "savings", savingId, "goals", goalId);
-
-        const goalSnapshot = await getDoc(goalRef);
-        if (!goalSnapshot.exists()) {
-            return res.status(404).send({ error: 'Goal not found.' });
-        }
-
-        const goalData = goalSnapshot.data();
-
-        const savingRef = doc(db, "users", userId, "savings", savingId);
+        const savingRef = doc(usersCollection, userId, "savings", savingId);
         const savingSnapshot = await getDoc(savingRef);
 
         if (!savingSnapshot.exists()) {
             return res.status(404).send({ error: 'Saving not found.' });
         }
 
-        const savingData = savingSnapshot.data();
-        const { amount } = savingData;
+        const goalRef = doc(savingRef, "goals", goalId);
+        const goalSnapshot = await getDoc(goalRef);
+
+        if (!goalSnapshot.exists()) {
+            return res.status(404).send({ error: 'Goal not found.' });
+        }
+
+        const goalData = goalSnapshot.data();
+
+        let updatedStatus = goalData.status;
+        if (targetAmount && goalData.amount < targetAmount) {
+            updatedStatus = "On-Progress";
+        } else if (targetAmount && goalData.amount >= targetAmount) {
+            updatedStatus = "Completed";
+        }
 
         const updatedData = {
-            title: title || goalData.title,
-            targetAmount: targetAmount || goalData.targetAmount,
+            ...(title && { title }),
+            ...(targetAmount && { targetAmount }),
+            ...(updatedStatus && { status: updatedStatus }),
+            updatedAt: new Date(),
         };
-
-        const updatedTargetAmount = updatedData.targetAmount;
-        updatedData.status = amount >= updatedTargetAmount ? "Completed" : "On-Progress";
 
         await updateDoc(goalRef, updatedData);
 
         res.status(200).send({
-            id: goalId,
-            savingId: savingId,
+            message: "Goal updated successfully.",
+            goalId,
             ...updatedData,
-            amount: amount,
         });
     } catch (error) {
         console.error("Error updating goal: ", error);
         res.status(500).send({ error: 'Error updating goal!' });
     }
 };
-
 
 export const deleteGoal = async (req, res) => {
     try {
