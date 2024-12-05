@@ -12,7 +12,7 @@ const validCategoriesReduction = [
     "Parents", "Shopping", "Food", "Phone", "Entertainment", "Education", "Beauty",
     "Sports", "Social", "Transportations", "Clothing", "Car", "Alcohol", "Cigarettes",
     "Electronics", "Travel", "Health", "Pets", "Repairs", "Housing", "Home", "Gifts",
-    "Donations", "Lottery", "Snacks", "Kids", "Vegetables", "Fruits", "Goals"
+    "Donations", "Lottery", "Snacks", "Kids", "Vegetables", "Fruits"
 ];
 
 const validCategories = [...validCategoriesAddition, ...validCategoriesReduction];
@@ -205,7 +205,6 @@ export const getUser = async (req, res) => {
     }
 };
 
-
 export const deleteUser = async (req, res) => {
     try {
         const { userId } = req.params;
@@ -262,7 +261,6 @@ export const deleteUser = async (req, res) => {
     }
 };
 
-
 export const getSavings = async (req, res) => {
     try {
         const { userId } = req.params;
@@ -294,6 +292,33 @@ export const getSavings = async (req, res) => {
         }));
         const totalReductions = reductions.reduce((total, item) => total + item.amount, 0);
 
+        const goalsCollectionRef = collection(savingRef, "goals");
+        const goalsSnapshot = await getDocs(goalsCollectionRef);
+        const currentDate = new Date();
+
+        const goals = goalsSnapshot.docs.map((doc) => {
+            const goalData = doc.data();
+            const deadline = goalData.deadline
+                ? new Date(goalData.deadline.seconds * 1000)
+                : null;
+
+            let daysLeft = null;
+            if (deadline) {
+                const timeDifference = deadline - currentDate;
+                daysLeft = Math.ceil(timeDifference / (1000 * 60 * 60 * 24));
+            }
+
+            return {
+                id: doc.id,
+                ...goalData,
+                deadline: deadline
+                    ? `${daysLeft > 0 ? daysLeft : 0} Days Left`
+                    : "No deadline",
+            };
+        });
+
+        const totalGoals = goals.reduce((total, goal) => total + (goal.amount || 0), 0);
+
         const savingData = savingDoc.data();
 
         res.status(200).send({
@@ -304,8 +329,10 @@ export const getSavings = async (req, res) => {
                 amount: savingData.amount,
                 totalAdditions,
                 totalReductions,
+                totalGoals,
                 additions,
                 reductions,
+                goals,
             },
         });
     } catch (e) {
@@ -691,26 +718,17 @@ export const addGoalAmount = async (req, res) => {
         const updatedGoalAmount = goalData.amount + amount;
         const status = updatedGoalAmount >= goalData.targetAmount ? "Completed" : "On-Progress";
 
-        await updateDoc(goalRef, { 
-            amount: updatedGoalAmount, 
-            status, 
-            updatedAt: new Date() 
+        await updateDoc(goalRef, {
+            amount: updatedGoalAmount,
+            status,
+            updatedAt: new Date()
         });
 
         const updatedSavingAmount = savingData.amount - amount;
-        await updateDoc(savingRef, { 
-            amount: updatedSavingAmount, 
-            updatedAt: new Date() 
+        await updateDoc(savingRef, {
+            amount: updatedSavingAmount,
+            updatedAt: new Date()
         });
-
-        const reductionCollectionRef = collection(savingRef, "reduction");
-        const reductionData = {
-            amount,
-            description: `Amount added to goal: ${goalData.title}`,
-            category: "Goal",
-            createdAt: new Date(),
-        };
-        await addDoc(reductionCollectionRef, reductionData);
 
         res.status(200).send({
             message: "Goal amount added successfully.",
@@ -724,13 +742,19 @@ export const addGoalAmount = async (req, res) => {
     }
 };
 
+
 export const addGoal = async (req, res) => {
     try {
         const { userId, savingId } = req.params;
-        const { title, targetAmount } = req.body;
+        const { title, targetAmount, deadline } = req.body;
 
-        if (!title || !targetAmount) {
-            return res.status(400).send({ error: 'Title and targetAmount are required.' });
+        if (!title || !targetAmount || !deadline) {
+            return res.status(400).send({ error: 'Title, targetAmount, and deadline are required.' });
+        }
+
+        const parsedDeadline = new Date(deadline);
+        if (isNaN(parsedDeadline)) {
+            return res.status(400).send({ error: 'Invalid deadline format. Use YYYY-MM-DD.' });
         }
 
         const savingRef = doc(usersCollection, userId, "savings", savingId);
@@ -741,20 +765,30 @@ export const addGoal = async (req, res) => {
         }
 
         const goalsCollectionRef = collection(savingRef, "goals");
-        const goalData = { 
-            title, 
-            targetAmount, 
-            amount: 0, 
-            status: "On-Progress", 
-            createdAt: new Date() 
+        const goalData = {
+            title,
+            targetAmount,
+            amount: 0,
+            status: "On-Progress",
+            createdAt: new Date(),
+            deadline: parsedDeadline
         };
 
         const goalRef = await addDoc(goalsCollectionRef, goalData);
 
+        const currentDate = new Date();
+        const timeDifference = parsedDeadline - currentDate;
+        const daysLeft = Math.ceil(timeDifference / (1000 * 60 * 60 * 24));
+
         res.status(201).send({
             message: "Goal added successfully.",
             id: goalRef.id,
-            ...goalData,
+            title,
+            targetAmount,
+            amount: 0,
+            status: "On-Progress",
+            createdAt: new Date(),
+            deadline: `${daysLeft > 0 ? daysLeft : 0} Days Left`,
         });
     } catch (error) {
         console.error("Error adding goal: ", error);
@@ -762,47 +796,13 @@ export const addGoal = async (req, res) => {
     }
 };
 
-export const getGoals = async (req, res) => {
-    try {
-        const { userId, savingId } = req.params;
-
-        if (!userId || !savingId) {
-            return res.status(400).send({ error: 'userId and savingId are required.' });
-        }
-
-        const savingRef = doc(db, "users", userId, "savings", savingId);
-        const savingSnapshot = await getDoc(savingRef);
-
-        if (!savingSnapshot.exists()) {
-            return res.status(404).send({ error: 'Saving not found.' });
-        }
-
-        const goalsCollectionRef = collection(savingRef, "goals");
-        const goalsSnapshot = await getDocs(goalsCollectionRef);
-
-        if (goalsSnapshot.empty) {
-            return res.status(404).send({ error: 'No goals found.' });
-        }
-
-        const goals = goalsSnapshot.docs.map((doc) => ({
-            id: doc.id,
-            ...doc.data(),
-        }));
-
-        res.status(200).send(goals);
-    } catch (error) {
-        console.error("Error fetching goals: ", error);
-        res.status(500).send({ error: 'Error fetching goals!' });
-    }
-};
-
 export const updateGoal = async (req, res) => {
     try {
         const { userId, savingId, goalId } = req.params;
-        const { title, targetAmount } = req.body;
+        const { title, targetAmount, deadline } = req.body;
 
-        if (!title && !targetAmount) {
-            return res.status(400).send({ error: 'At least one of title or targetAmount is required.' });
+        if (!title && !targetAmount && !deadline) {
+            return res.status(400).send({ error: 'At least one of title, targetAmount, or deadline is required.' });
         }
 
         const savingRef = doc(usersCollection, userId, "savings", savingId);
@@ -831,6 +831,7 @@ export const updateGoal = async (req, res) => {
         const updatedData = {
             ...(title && { title }),
             ...(targetAmount && { targetAmount }),
+            ...(deadline && { deadline: new Date(deadline) }),
             ...(updatedStatus && { status: updatedStatus }),
             updatedAt: new Date(),
         };
@@ -847,6 +848,7 @@ export const updateGoal = async (req, res) => {
         res.status(500).send({ error: 'Error updating goal!' });
     }
 };
+
 
 export const deleteGoal = async (req, res) => {
     try {

@@ -12,7 +12,6 @@ import {
     updateUser,
     deleteUser,
     addGoal,
-    getGoals,
     addGoalAmount,
     updateGoal,
     deleteGoal,
@@ -39,7 +38,6 @@ routes.delete("/savings/:userId/:savingId/:transactionId", authenticate, deleteT
 
 routes.post("/goals/:userId/:savingId", authenticate, addGoal);
 routes.post("/goals/:userId/:savingId/:goalId", authenticate, addGoalAmount);
-routes.get("/goals/:userId/:savingId", authenticate, getGoals);
 routes.put("/goals/:userId/:savingId/:goalId", authenticate, updateGoal);
 routes.delete("/goals/:userId/:savingId/:goalId", authenticate, deleteGoal);
 
