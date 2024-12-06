@@ -523,7 +523,7 @@ export const getCategory = async (req, res) => {
 export const updateTransaction = async (req, res) => {
     try {
         const { userId, savingId, transactionId } = req.params;
-        const { amount, description, category } = req.body;
+        const { amount, description, category, date } = req.body;
 
         if (!userId || !savingId || !transactionId) {
             return res.status(400).send({
@@ -592,6 +592,15 @@ export const updateTransaction = async (req, res) => {
         if (category !== undefined) {
             updatedTransaction.category = category;
         }
+        if (date !== undefined) {
+            const isValidDate = /^\d{4}-\d{2}-\d{2}$/.test(date);
+            if (!isValidDate) {
+                return res.status(400).send({
+                    error: 'Date must be in YYYY-MM-DD format.',
+                });
+            }
+            updatedTransaction.date = new Date(date);
+        }
 
         await updateDoc(transactionRef, updatedTransaction);
 
@@ -624,6 +633,7 @@ export const updateTransaction = async (req, res) => {
         res.status(500).send({ error: 'Error updating transaction!' });
     }
 };
+
 
 export const deleteTransaction = async (req, res) => {
     try {
@@ -742,65 +752,6 @@ export const addGoalAmount = async (req, res) => {
     }
 };
 
-export const reduceGoalAmount = async (req, res) => {
-    try {
-        const { userId, savingId, goalId } = req.params;
-        const { amount } = req.body;
-
-        if (!amount || amount <= 0) {
-            return res.status(400).send({ error: 'Amount must be greater than zero.' });
-        }
-
-        const savingRef = doc(usersCollection, userId, "savings", savingId);
-        const savingSnapshot = await getDoc(savingRef);
-
-        if (!savingSnapshot.exists()) {
-            return res.status(404).send({ error: 'Saving not found.' });
-        }
-
-        const goalRef = doc(savingRef, "goals", goalId);
-        const goalSnapshot = await getDoc(goalRef);
-
-        if (!goalSnapshot.exists()) {
-            return res.status(404).send({ error: 'Goal not found.' });
-        }
-
-        const savingData = savingSnapshot.data();
-        const goalData = goalSnapshot.data();
-
-        if (goalData.amount < amount) {
-            return res.status(400).send({ error: 'Insufficient goal amount to reduce.' });
-        }
-
-        const updatedGoalAmount = goalData.amount - amount;
-        const updatedSavingAmount = savingData.amount + amount;
-        const status = updatedGoalAmount === 0 ? "On-Progress" : goalData.status;
-
-        await updateDoc(goalRef, {
-            amount: updatedGoalAmount,
-            status,
-            updatedAt: new Date(),
-        });
-
-        await updateDoc(savingRef, {
-            amount: updatedSavingAmount,
-            updatedAt: new Date(),
-        });
-
-        res.status(200).send({
-            message: "Goal amount reduced successfully.",
-            goalId,
-            updatedGoalAmount,
-            updatedSavingAmount,
-        });
-    } catch (error) {
-        console.error("Error reducing goal amount: ", error);
-        res.status(500).send({ error: 'Error reducing goal amount!' });
-    }
-};
-
-
-
 export const addGoal = async (req, res) => {
     try {
         const { userId, savingId } = req.params;
@@ -857,11 +808,7 @@ export const addGoal = async (req, res) => {
 export const updateGoal = async (req, res) => {
     try {
         const { userId, savingId, goalId } = req.params;
-        const { title, targetAmount, deadline } = req.body;
-
-        if (!title && !targetAmount && !deadline) {
-            return res.status(400).send({ error: 'At least one of title, targetAmount, or deadline is required.' });
-        }
+        const { amount, title, targetAmount, deadline, date } = req.body;
 
         const savingRef = doc(usersCollection, userId, "savings", savingId);
         const savingSnapshot = await getDoc(savingRef);
@@ -878,6 +825,43 @@ export const updateGoal = async (req, res) => {
         }
 
         const goalData = goalSnapshot.data();
+        const savingData = savingSnapshot.data();
+
+        if (amount) {
+            if (!amount || amount <= 0) {
+                return res.status(400).send({ error: 'Amount must be greater than zero.' });
+            }
+
+            if (goalData.amount < amount) {
+                return res.status(400).send({ error: 'Insufficient goal amount to reduce.' });
+            }
+
+            const updatedGoalAmount = goalData.amount - amount;
+            const updatedSavingAmount = savingData.amount + amount;
+            const status = updatedGoalAmount === 0 ? "On-Progress" : goalData.status;
+
+            await updateDoc(goalRef, {
+                amount: updatedGoalAmount,
+                status,
+                updatedAt: new Date(),
+            });
+
+            await updateDoc(savingRef, {
+                amount: updatedSavingAmount,
+                updatedAt: new Date(),
+            });
+
+            return res.status(200).send({
+                message: "Goal amount reduced successfully.",
+                goalId,
+                updatedGoalAmount,
+                updatedSavingAmount,
+            });
+        }
+
+        if (!title && !targetAmount && !deadline && !date) {
+            return res.status(400).send({ error: 'At least one of title, targetAmount, deadline, or date is required.' });
+        }
 
         let updatedStatus = goalData.status;
         if (targetAmount && goalData.amount < targetAmount) {
@@ -891,6 +875,7 @@ export const updateGoal = async (req, res) => {
             ...(targetAmount && { targetAmount }),
             ...(deadline && { deadline: new Date(deadline) }),
             ...(updatedStatus && { status: updatedStatus }),
+            ...(date && { date: new Date(date) }),
             updatedAt: new Date(),
         };
 
@@ -902,11 +887,10 @@ export const updateGoal = async (req, res) => {
             ...updatedData,
         });
     } catch (error) {
-        console.error("Error updating goal: ", error);
-        res.status(500).send({ error: 'Error updating goal!' });
+        console.error("Error updating or reducing goal: ", error);
+        res.status(500).send({ error: 'Error updating or reducing goal!' });
     }
 };
-
 
 export const deleteGoal = async (req, res) => {
     try {
