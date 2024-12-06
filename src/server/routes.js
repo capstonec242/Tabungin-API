@@ -13,6 +13,7 @@ import {
     deleteUser,
     addGoal,
     addGoalAmount,
+    reduceGoalAmount,
     updateGoal,
     deleteGoal,
 } from "./handler.js";
@@ -38,6 +39,7 @@ routes.delete("/savings/:userId/:savingId/:transactionId", authenticate, deleteT
 
 routes.post("/goals/:userId/:savingId", authenticate, addGoal);
 routes.post("/goals/:userId/:savingId/:goalId", authenticate, addGoalAmount);
+routes.put("/goals/:userId/:savingId/:goalId", authenticate, reduceGoalAmount);
 routes.put("/goals/:userId/:savingId/:goalId", authenticate, updateGoal);
 routes.delete("/goals/:userId/:savingId/:goalId", authenticate, deleteGoal);
 

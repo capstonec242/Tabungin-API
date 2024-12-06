@@ -742,6 +742,64 @@ export const addGoalAmount = async (req, res) => {
     }
 };
 
+export const reduceGoalAmount = async (req, res) => {
+    try {
+        const { userId, savingId, goalId } = req.params;
+        const { amount } = req.body;
+
+        if (!amount || amount <= 0) {
+            return res.status(400).send({ error: 'Amount must be greater than zero.' });
+        }
+
+        const savingRef = doc(usersCollection, userId, "savings", savingId);
+        const savingSnapshot = await getDoc(savingRef);
+
+        if (!savingSnapshot.exists()) {
+            return res.status(404).send({ error: 'Saving not found.' });
+        }
+
+        const goalRef = doc(savingRef, "goals", goalId);
+        const goalSnapshot = await getDoc(goalRef);
+
+        if (!goalSnapshot.exists()) {
+            return res.status(404).send({ error: 'Goal not found.' });
+        }
+
+        const savingData = savingSnapshot.data();
+        const goalData = goalSnapshot.data();
+
+        if (goalData.amount < amount) {
+            return res.status(400).send({ error: 'Insufficient goal amount to reduce.' });
+        }
+
+        const updatedGoalAmount = goalData.amount - amount;
+        const updatedSavingAmount = savingData.amount + amount;
+        const status = updatedGoalAmount === 0 ? "On-Progress" : goalData.status;
+
+        await updateDoc(goalRef, {
+            amount: updatedGoalAmount,
+            status,
+            updatedAt: new Date(),
+        });
+
+        await updateDoc(savingRef, {
+            amount: updatedSavingAmount,
+            updatedAt: new Date(),
+        });
+
+        res.status(200).send({
+            message: "Goal amount reduced successfully.",
+            goalId,
+            updatedGoalAmount,
+            updatedSavingAmount,
+        });
+    } catch (error) {
+        console.error("Error reducing goal amount: ", error);
+        res.status(500).send({ error: 'Error reducing goal amount!' });
+    }
+};
+
+
 
 export const addGoal = async (req, res) => {
     try {
