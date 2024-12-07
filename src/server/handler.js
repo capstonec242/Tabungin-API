@@ -6,6 +6,11 @@ import bcrypt from "bcrypt";
 
 const usersCollection = collection(db, 'users');
 
+const categoryIcons = {
+    "Salary": "https://storage.googleapis.com/tabungin-dataset/category-icons/Salary.svg"
+};
+
+
 const validCategoriesAddition = ["Salary", "Investments", "Part-Time", "Bonus", "Others"];
 
 const validCategoriesReduction = [
@@ -278,18 +283,26 @@ export const getSavings = async (req, res) => {
 
         const additionCollectionRef = collection(savingRef, "addition");
         const additionsSnapshot = await getDocs(additionCollectionRef);
-        const additions = additionsSnapshot.docs.map((doc) => ({
-            id: doc.id,
-            ...doc.data(),
-        }));
+        const additions = additionsSnapshot.docs.map((doc) => {
+            const data = doc.data();
+            return {
+                id: doc.id,
+                ...data,
+                iconUrl: categoryIcons[data.category] || null,
+            };
+        });
         const totalAdditions = additions.reduce((total, item) => total + item.amount, 0);
 
         const reductionCollectionRef = collection(savingRef, "reduction");
         const reductionsSnapshot = await getDocs(reductionCollectionRef);
-        const reductions = reductionsSnapshot.docs.map((doc) => ({
-            id: doc.id,
-            ...doc.data(),
-        }));
+        const reductions = reductionsSnapshot.docs.map((doc) => {
+            const data = doc.data();
+            return {
+                id: doc.id,
+                ...data,
+                iconUrl: categoryIcons[data.category] || null,
+            };
+        });
         const totalReductions = reductions.reduce((total, item) => total + item.amount, 0);
 
         const goalsCollectionRef = collection(savingRef, "goals");
@@ -314,6 +327,7 @@ export const getSavings = async (req, res) => {
                 deadline: deadline
                     ? `${daysLeft > 0 ? daysLeft : 0} Days Left`
                     : "No deadline",
+                iconUrl: categoryIcons[goalData.category] || null,
             };
         });
 
@@ -340,6 +354,7 @@ export const getSavings = async (req, res) => {
         res.status(500).send({ error: "Error fetching savings!" });
     }
 };
+
 
 export const addSavings = async (req, res) => {
     try {
