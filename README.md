@@ -30,6 +30,7 @@ To understand the architecture and hierarchy of this project, refer to the follo
 ## 📡 API Documentation
 Comprehensive API documentation is available on Postman:  
 [Tabungin API Documentation on Postman](https://documenter.getpostman.com/view/39297796/2sAYBUEY3r)
+[Tabungin API Model Deploy on Postman ](https://documenter.getpostman.com/view/39629485/2sAYBbeowM)
 
 ---
 
@@ -59,5 +60,11 @@ Comprehensive API documentation is available on Postman:
    - Track progress of goals with `/goals/:userId/:savingId`.
    - Update saving goal with `/goals/:userId/:savingId/:goalId`.
    - Delete saving goal with `/goals/:userId/:savingId/:goalId`.
+  
+4. **Rekomendasion**:
+   - Create a recomendations predict with `/https://tabunginmodel-66486896293.asia-southeast2.run.app/predict`.
+
+
+
   
 Note: For more details, please visit the documentation link postman above.
