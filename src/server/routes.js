@@ -5,6 +5,9 @@ import {
     getCategory,
     updateTransaction,
     deleteTransaction,
+    addBudget,
+    updateBudget,
+    deleteBudget,
     registerUser,
     loginUser,
     getUser,
@@ -35,6 +38,10 @@ routes.put("/savings/:userId/add", authenticate, addSavings)
 routes.put("/savings/:userId/reduce", authenticate, reduceSavings)
 routes.put("/savings/:userId/:savingId/:transactionId", authenticate, updateTransaction);
 routes.delete("/savings/:userId/:savingId/:transactionId", authenticate, deleteTransaction);
+
+routes.post("/savings/:userId/:savingId/budget", authenticate, addBudget);
+routes.put("/savings/:userId/:savingId/budget/:budgetId", authenticate, updateBudget);
+routes.delete("/savings/:userId/:savingId/budget/:budgetId", authenticate, deleteBudget);
 
 routes.post("/goals/:userId/:savingId", authenticate, addGoal);
 routes.post("/goals/:userId/:savingId/:goalId", authenticate, addGoalAmount);

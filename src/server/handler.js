@@ -333,6 +333,16 @@ export const getSavings = async (req, res) => {
 
         const totalGoals = goals.reduce((total, goal) => total + (goal.amount || 0), 0);
 
+        const budgetCollectionRef = collection(savingRef, "budget");
+        const budgetsSnapshot = await getDocs(budgetCollectionRef);
+        const budgets = await Promise.all(budgetsSnapshot.docs.map(async (doc) => {
+            const data = doc.data();
+            return {
+                id: doc.id,
+                ...data,
+            };
+        }));
+
         const savingData = savingDoc.data();
 
         res.status(200).send({
@@ -347,6 +357,7 @@ export const getSavings = async (req, res) => {
                 additions,
                 reductions,
                 goals,
+                budgets,
             },
         });
     } catch (e) {
@@ -354,6 +365,7 @@ export const getSavings = async (req, res) => {
         res.status(500).send({ error: "Error fetching savings!" });
     }
 };
+
 
 
 export const addSavings = async (req, res) => {
@@ -459,15 +471,49 @@ export const reduceSavings = async (req, res) => {
 
         await addDoc(reductionCollectionRef, transactionData);
 
-        res.status(200).send({
-            message: "Reduction success!",
-            data: {
-                id: savingDoc.id,
-                userId,
-                updatedAmount,
-                transaction: transactionData,
-            },
-        });
+        const budgetCollectionRef = collection(savingRef, "budget");
+        const budgetsSnapshot = await getDocs(budgetCollectionRef);
+        const budgetDocs = budgetsSnapshot.docs.filter((doc) => doc.data().category === category);
+
+        if (budgetDocs.length === 0) {
+            return res.status(404).send({ error: 'Category not found in budget.' });
+        }
+
+        const budgetRef = doc(budgetCollectionRef, budgetDocs[0].id);
+        const budgetDoc = await getDoc(budgetRef);
+
+        if (!budgetDoc.exists()) {
+            return res.status(404).send({ error: 'Budget document not found.' });
+        }
+
+        if (budgetDoc) {
+            const budgetRef = doc(budgetCollectionRef, budgetDoc.id);
+            const updatedBudget = budgetDoc.data().budget - amount;
+
+            await updateDoc(budgetRef, { budget: updatedBudget });
+
+            if (updatedBudget < 0) {
+                return res.status(200).send({
+                    message: "Reduction success, but the budget for this category is now negative!",
+                    data: {
+                        id: savingDoc.id,
+                        userId,
+                        updatedAmount,
+                        transaction: transactionData,
+                        updatedBudget,
+                    },
+                });
+            }
+            res.status(200).send({
+                message: "Reduction successful, but no budget was assigned to this category.",
+                data: {
+                    id: savingDoc.id,
+                    userId,
+                    updatedAmount,
+                    transaction: transactionData,
+                },
+            });
+        }
     } catch (error) {
         console.error("Error reducing savings: ", error);
         res.status(500).send({ error: 'Error reducing savings!' });
@@ -706,6 +752,192 @@ export const deleteTransaction = async (req, res) => {
     } catch (error) {
         console.error("Error deleting transaction: ", error);
         res.status(500).send({ error: "Error deleting transaction!" });
+    }
+};
+
+
+export const addBudget = async (req, res) => {
+    try {
+        const { userId, savingId } = req.params;
+        const { budget, category, type, month, week, day } = req.body;
+
+        if (!category || !validCategories.includes(category)) {
+            return res.status(400).send({ error: 'Invalid category.' });
+        }
+
+        if (!['Monthly', 'Weekly', 'Daily'].includes(type)) {
+            return res.status(400).send({ error: 'Invalid type. Allowed types are: Monthly, Weekly, Daily.' });
+        }
+
+        if (typeof budget !== "number" || budget <= 0) {
+            return res.status(400).send({ error: 'Budget must be a positive number.' });
+        }
+
+        const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+        if (type === 'Monthly' && !months.includes(month)) {
+            return res.status(400).send({ error: 'Month must be a valid month name.' });
+        }
+        if (type === 'Weekly' && (typeof week !== "number" || week < 1 || week > 4)) {
+            return res.status(400).send({ error: 'Week must be a number between 1 and 4.' });
+        }
+        if (type === 'Daily' && (typeof day !== "number" || day < 1 || day > 31)) {
+            return res.status(400).send({ error: 'Day must be a number between 1 and 31.' });
+        }
+
+        const savingRef = doc(usersCollection, userId, "savings", savingId);
+        const savingDoc = await getDoc(savingRef);
+
+        if (!savingDoc.exists()) {
+            return res.status(404).send({ error: 'Saving ID not found.' });
+        }
+
+        const budgetCollectionRef = collection(savingRef, "budget");
+        const existingBudgetsSnapshot = await getDocs(budgetCollectionRef);
+        const existingCategories = existingBudgetsSnapshot.docs.map((doc) => doc.data().category);
+
+        if (existingCategories.includes(category)) {
+            return res.status(400).send({ error: 'Category already exists.' });
+        }
+
+        let resetDate;
+        if (type === 'Monthly') {
+            resetDate = `Every ${month}`;
+        } else if (type === 'Weekly') {
+            resetDate = `Every Week ${week}`;
+        } else if (type === 'Daily') {
+            resetDate = `Every Day ${day}`;
+        }
+
+        await addDoc(budgetCollectionRef, {
+            category,
+            budget,
+            type,
+            resetDate, 
+            createdAt: new Date(),
+        });
+
+        res.status(200).send({ message: "Budget added successfully." });
+    } catch (error) {
+        console.error("Error adding budget: ", error);
+        res.status(500).send({ error: "Error adding budget!" });
+    }
+};
+
+
+export const updateBudget = async (req, res) => {
+    try {
+        const { userId, savingId, budgetId } = req.params;
+        const { budget, category, type, month, week, day } = req.body;
+
+        if (category && !validCategories.includes(category)) {
+            return res.status(400).send({ error: 'Invalid category.' });
+        }
+
+        if (type && !['Monthly', 'Weekly', 'Daily'].includes(type)) {
+            return res.status(400).send({ error: 'Invalid type. Allowed types are: Monthly, Weekly, Daily.' });
+        }
+
+        const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+        if (type === 'Monthly' && month && !months.includes(month)) {
+            return res.status(400).send({ error: 'Month must be a valid month name.' });
+        }
+        if (type === 'Weekly' && (typeof week !== "number" || week < 1 || week > 4)) {
+            return res.status(400).send({ error: 'Week must be a number between 1 and 4.' });
+        }
+        if (type === 'Daily' && (typeof day !== "number" || day < 1 || day > 31)) {
+            return res.status(400).send({ error: 'Day must be a number between 1 and 31.' });
+        }
+
+        const savingRef = doc(usersCollection, userId, "savings", savingId);
+        const savingDoc = await getDoc(savingRef);
+
+        if (!savingDoc.exists()) {
+            return res.status(404).send({ error: 'Saving ID not found.' });
+        }
+
+        const budgetRef = doc(savingRef, "budget", budgetId);
+        const budgetDoc = await getDoc(budgetRef);
+
+        if (!budgetDoc.exists()) {
+            return res.status(404).send({ error: 'Budget ID not found.' });
+        }
+
+        const currentBudgetData = budgetDoc.data();
+        const updateData = {};
+
+        if (budget !== undefined) {
+            if (typeof budget !== "number") {
+                return res.status(400).send({ error: 'Budget must be a number.' });
+            }
+            updateData.budget = budget;
+        }
+
+        if (category !== undefined) {
+            if (!validCategories.includes(category)) {
+                return res.status(400).send({ error: 'Invalid category.' });
+            }
+            updateData.category = category;
+        }
+
+        if (type !== undefined) {
+            if (!['Monthly', 'Weekly', 'Daily'].includes(type)) {
+                return res.status(400).send({ error: 'Invalid type. Allowed types are: Monthly, Weekly, Daily.' });
+            }
+            updateData.type = type;
+        }
+
+        let resetDate;
+        if (type === 'Monthly' && month !== undefined) {
+            resetDate = `Every ${month}`;
+        } else if (type === 'Weekly' && week !== undefined) {
+            resetDate = `Every Week ${week}`;
+        } else if (type === 'Daily' && day !== undefined) {
+            resetDate = `Every Day ${day}`;
+        }
+
+        if (resetDate !== undefined) {
+            updateData.resetDate = resetDate;
+        }
+
+        await updateDoc(budgetRef, {
+            ...updateData,
+            updatedAt: new Date(),
+        });
+
+        res.status(200).send({ message: "Budget updated successfully." });
+    } catch (error) {
+        console.error("Error editing budget: ", error);
+        res.status(500).send({ error: "Error editing budget!" });
+    }
+};
+
+
+export const deleteBudget = async (req, res) => {
+    try {
+        const { userId, savingId, budgetId } = req.params;
+
+        const savingRef = doc(usersCollection, userId, "savings", savingId);
+        const savingDoc = await getDoc(savingRef);
+
+        if (!savingDoc.exists()) {
+            return res.status(404).send({ error: 'Saving ID not found.' });
+        }
+
+        const budgetRef = doc(savingRef, "budget", budgetId);
+        const budgetDoc = await getDoc(budgetRef);
+
+        if (!budgetDoc.exists()) {
+            return res.status(404).send({ error: 'Budget ID not found.' });
+        }
+
+        await deleteDoc(budgetRef);
+
+        res.status(200).send({ message: "Budget deleted successfully." });
+    } catch (error) {
+        console.error("Error deleting budget: ", error);
+        res.status(500).send({ error: "Error deleting budget!" });
     }
 };
 
