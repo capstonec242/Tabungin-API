@@ -75,10 +75,21 @@ export const loginUser = async (req, res) => {
         }
 
         const result = await signInWithEmailAndPassword(auth, email, password);
+        const { user } = result;
+
+        const userRef = doc(usersCollection, user.uid);
+        const userSnapshot = await getDoc(userRef);
+
+        if (!userSnapshot.exists()) {
+            return res.status(404).send({ error: "User data not found in Firestore." });
+        }
+
+        const userData = userSnapshot.data();
 
         res.status(200).send({
             message: "Login success.",
             data: {
+                username: userData.username,
                 user: JSON.parse(JSON.stringify(result.user)),
             }
         });
